@@ -5,6 +5,15 @@ from pathlib import Path
 from .books import resolve_book, book_by_number
 from .db import get_app_db, get_state, set_state
 
+BUNDLED_PLANS_DIR = Path(__file__).parent / "data" / "plans"
+
+
+def bundled_plans() -> dict[str, Path]:
+    """Plans shipped with writ, keyed by name (filename stem)."""
+    if not BUNDLED_PLANS_DIR.is_dir():
+        return {}
+    return {p.stem: p for p in sorted(BUNDLED_PLANS_DIR.glob("*.txt"))}
+
 
 # ── Plan file parsing ─────────────────────────────────────────────────────────
 
@@ -36,11 +45,16 @@ def _parse_line(line: str) -> dict | None:
         return None
 
     chapter_spec = parts[1]
-    if "-" in chapter_spec:
-        c_start, c_end = chapter_spec.split("-", 1)
-        chapter_start, chapter_end = int(c_start), int(c_end)
-    else:
-        chapter_start = chapter_end = int(chapter_spec)
+    try:
+        if "-" in chapter_spec:
+            c_start, c_end = chapter_spec.split("-", 1)
+            chapter_start, chapter_end = int(c_start), int(c_end)
+        else:
+            chapter_start = chapter_end = int(chapter_spec)
+    except ValueError:
+        return None
+    if chapter_start > chapter_end:
+        chapter_start, chapter_end = chapter_end, chapter_start
 
     return {
         "book":          book.number,
@@ -200,6 +214,7 @@ def _row_to_entry(row) -> dict:
     book = book_by_number(row["book"])
     return {
         "id":            row["id"],
+        "plan_name":     row["name"],
         "day":           row["day"],
         "book":          row["book"],
         "book_name":     book.name if book else f"Book {row['book']}",

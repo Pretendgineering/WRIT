@@ -128,6 +128,21 @@ def chapter_prompt(book: Book, chapter: int, max_chapter: int) -> str:
     return ch.lower()
 
 
+def action_prompt() -> str:
+    """Render the verse-level quick-action bar and return a single-char choice."""
+    bar = Text("  ")
+    bar.append("[b]", style="bold")
+    bar.append("ookmark  ")
+    bar.append("[+]", style="bold")
+    bar.append("note  ")
+    bar.append("[q]", style="bold")
+    bar.append("uit")
+    console.print(bar, end="")
+    ch = getch()
+    console.print()
+    return ch.lower()
+
+
 # ── Comparison display ────────────────────────────────────────────────────────
 
 def display_comparison(verse_sets: list[tuple[str, list[Verse]]]) -> None:
@@ -149,7 +164,10 @@ def display_comparison(verse_sets: list[tuple[str, list[Verse]]]) -> None:
             match = next((v for v in verses if v.verse == vnum), None)
             cell = Text()
             cell.append(f"{vnum} ", style="bold dim")
-            cell.append(match.text.strip() if match else "[dim]—[/dim]")
+            if match:
+                cell.append(match.text.strip())
+            else:
+                cell.append("—", style="dim")
             row.append(cell)
         table.add_row(*row)
 

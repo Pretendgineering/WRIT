@@ -41,8 +41,7 @@ USFM_TO_NUM: dict[str, int] = {
     "1PE": 60, "2PE": 61, "1JN": 62, "2JN": 63, "3JN": 64,
     "JUD": 65, "REV": 66,
     # Common alternates
-    "SOS": 22, "EZE": 26, "NAH": 34, "MRK": 41, "MK": 41,
-    "JAS": 59, "JUDE": 65,
+    "SOS": 22, "EZE": 26, "NAH": 34, "MK": 41, "JUDE": 65,
 }
 
 BOOK_NAMES_TO_NUM: dict[str, int] = {

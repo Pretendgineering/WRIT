@@ -9,6 +9,7 @@ Example:              writ ge 1 1-3
 """
 from __future__ import annotations
 
+import sys
 from typing import Optional
 
 import typer
@@ -19,6 +20,7 @@ from .bookmarks import add_bookmark, get_bookmark, list_bookmarks, remove_bookma
 from .daily import get_daily_ref
 from .db import get_app_db, get_state, list_translations, set_state
 from .display import (
+    action_prompt,
     chapter_prompt,
     console,
     display_bookmark_tree,
@@ -28,7 +30,6 @@ from .display import (
     display_search_results,
     display_verses,
     display_verses_with_notes,
-    fmt_ref,
     print_error,
     print_info,
     print_success,
@@ -37,6 +38,7 @@ from .history import get_history, get_last_position, get_reading_streak, record
 from .lookup import fetch_verses, get_chapter_count, get_default_translation, get_random_verse
 from .notes import get_note, get_notes_for_chapter, list_notes, remove_note, upsert_note
 from .plans import (
+    bundled_plans,
     days_behind,
     get_active_plan,
     get_catchup_entries,
@@ -157,13 +159,7 @@ def _interactive_chapter(translation: str, book_num: int, start_chapter: int) ->
 # ── Main lookup (default command) ───────────────────────────────────────────
 
 @app.callback(invoke_without_command=True)
-def lookup(
-    ctx: typer.Context,
-    translation: Optional[str] = typer.Option(None, "-t", "--translation",
-                                               help="Translation to use  (e.g. esv, kjv, web)"),
-    compare_with: Optional[str] = typer.Option(None, "-c", "--compare",
-                                                help="Compare with extra translation(s), comma-separated"),
-) -> None:
+def _root(ctx: typer.Context) -> None:
     """
     Look up Bible verses.
 
@@ -172,30 +168,34 @@ def lookup(
       writ ps 23          Psalm 23 (interactive)\n
       writ ge             Genesis ch.1 (interactive)
     """
-    if ctx.invoked_subcommand is not None:
-        return
-
-    # ctx.args contains positional tokens not consumed by the options above
-    args = [a for a in ctx.args if not a.startswith("-")]
-    if not args:
+    if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())
-        return
 
-    book_ref = args[0]
-    if len(args) > 1:
-        try:
-            chapter: Optional[int] = int(args[1])
-        except ValueError:
-            print_error(f"unknown command or invalid chapter '{args[1]}' — try [bold]writ --help[/bold]")
-            raise typer.Exit(1)
-    else:
-        chapter = None
-    verses:  Optional[str] = args[2]       if len(args) > 2 else None
 
+@app.command(name="lookup", hidden=True)
+def lookup(
+    book_ref:    str           = typer.Argument(..., metavar="BOOK"),
+    chapter_arg: Optional[str] = typer.Argument(None, metavar="[CHAPTER]"),
+    verses:      Optional[str] = typer.Argument(None, metavar="[VERSES]"),
+    translation: Optional[str] = typer.Option(None, "-t", "--translation",
+                                               help="Translation to use  (e.g. kjv)"),
+    compare_with: Optional[str] = typer.Option(None, "-c", "--compare",
+                                                help="Compare with extra translation(s), comma-separated"),
+) -> None:
+    """Look up Bible verses (the default when you type 'writ <book> ...')."""
     book = resolve_book(book_ref)
     if not book:
         print_error(f"unknown book '{book_ref}' — try [bold]writ books[/bold] for a list")
         raise typer.Exit(1)
+
+    if chapter_arg is not None:
+        try:
+            chapter: Optional[int] = int(chapter_arg)
+        except ValueError:
+            print_error(f"invalid chapter '{chapter_arg}' — try [bold]writ --help[/bold]")
+            raise typer.Exit(1)
+    else:
+        chapter = None
 
     tr = _tr(translation)
 
@@ -208,7 +208,7 @@ def lookup(
     verse_list = fetch_verses(tr, book, chapter or 1, verses)
     if not verse_list:
         print_error(
-            f"no results for {book.name} {chapter}:{verses} in {tr.upper()}"
+            f"no results for {book.name} {chapter or 1}:{verses} in {tr.upper()}"
         )
         raise typer.Exit(1)
 
@@ -234,10 +234,7 @@ def lookup(
         display_comparison(pairs)
 
     # Quick-action bar for verse-level lookups
-    console.print("  [bold][b][/bold]ookmark  [bold][+][/bold]note  [bold][q][/bold]uit", end="  ")
-    from .display import getch
-    choice = getch()
-    console.print(choice)
+    choice = action_prompt()
 
     if choice == "b":
         path = Prompt.ask("  bookmark path")
@@ -291,8 +288,10 @@ def cont(
         if not pos:
             print_info("no history yet — try: writ ge 1")
             return
+        # Prefer an explicit -t flag; otherwise resume in the translation last read.
+        resume_tr = translation.lower() if translation else pos["translation"]
         console.print(f"[dim]resuming {pos['book_name']} {pos['chapter']}[/dim]")
-        _interactive_chapter(tr or pos["translation"], pos["book"], pos["chapter"])
+        _interactive_chapter(resume_tr, pos["book"], pos["chapter"])
 
 
 def _read_plan_entry(tr: str, entry: dict, prompt_done: bool = False) -> None:
@@ -307,9 +306,13 @@ def _read_plan_entry(tr: str, entry: dict, prompt_done: bool = False) -> None:
     for ch in range(entry["chapter_start"], entry["chapter_end"] + 1):
         _interactive_chapter(tr, book.number, ch)
 
-    if prompt_done and Confirm.ask("  mark as done and advance?", default=True):
+    try:
+        advance = prompt_done and Confirm.ask("  mark as done and advance?", default=True)
+    except EOFError:
+        advance = False
+    if advance:
         mark_entry_done(entry["id"])
-        nxt = get_next_entry(entry.get("plan_name", ""))  # best-effort
+        nxt = get_next_entry(entry["plan_name"])
         if nxt:
             print_success(f"done! next: {nxt['book_name']} {nxt['chapter_start']}")
         else:
@@ -428,7 +431,9 @@ def compare(
 # ── First-time setup ────────────────────────────────────────────────────────────────────────
 
 @app.command()
-def setup() -> None:
+def setup(
+    force: bool = typer.Option(False, "--force", help="Re-download even if already installed"),
+) -> None:
     """Download and install the King James Bible as the default translation."""
     import urllib.request
     import csv
@@ -445,11 +450,19 @@ def setup() -> None:
     ensure_dirs()
     db_path = TRANSLATIONS_DIR / "kjv.db"
 
-    if db_path.exists():
-        if not Confirm.ask(
-            "  [yellow]kjv.db already exists.[/yellow] Re-download and overwrite?",
-            default=False,
-        ):
+    if db_path.exists() and not force:
+        # When run non-interactively (e.g. from install.sh), never prompt.
+        if not sys.stdin.isatty():
+            print_info("kjv already installed — run 'writ setup --force' to re-download")
+            return
+        try:
+            overwrite = Confirm.ask(
+                "  [yellow]kjv.db already exists.[/yellow] Re-download and overwrite?",
+                default=False,
+            )
+        except EOFError:
+            overwrite = False
+        if not overwrite:
             print_info("skipped — run 'writ set translation kjv' if not already set")
             return
 
@@ -476,6 +489,7 @@ def setup() -> None:
 
     # Parse CSV — format: Book,Chapter,Verse,Text (book name strings)
     rows: list[tuple[int, int, int, str]] = []
+    unknown_books: dict[str, int] = {}
     reader = csv.reader(raw.splitlines())
     for line in reader:
         if not line or len(line) < 4:
@@ -485,6 +499,7 @@ def setup() -> None:
             continue  # header row
         book_obj = resolve_book(book_raw)
         if book_obj is None:
+            unknown_books[book_raw] = unknown_books.get(book_raw, 0) + 1
             continue
         try:
             rows.append((book_obj.number, int(c_raw), int(v_raw), text))
@@ -494,6 +509,13 @@ def setup() -> None:
     if not rows:
         print_error("CSV parsed but no verses found — format may have changed.")
         raise typer.Exit(1)
+    if unknown_books:
+        skipped = sum(unknown_books.values())
+        print_error(
+            f"skipped {skipped:,} verses from unrecognized book names: "
+            f"{', '.join(sorted(unknown_books))} — please report this at "
+            f"https://github.com/Spasm0dic/WRIT/issues"
+        )
 
     console.print(f"[dim]Writing {len(rows):,} verses to {db_path}…[/dim]")
     conn = _sqlite3.connect(db_path)
@@ -575,17 +597,42 @@ def books() -> None:
 
 @app.command(name="set")
 def set_config(
-    key:   str = typer.Argument(..., help="Setting key  (translation | plan)"),
-    value: str = typer.Argument(..., help="Value to set"),
+    key:   str           = typer.Argument(..., help="Setting key  (translation | plan)"),
+    value: Optional[str] = typer.Argument(None, help="Value to set"),
 ) -> None:
-    """Set a persistent configuration value."""
+    """Set a persistent configuration value.
+
+      writ set translation kjv\n
+      writ set plan gospels
+    """
     key_map = {
         "translation": "default_translation",
         "plan":        "active_plan",
     }
     if key not in key_map:
-        print_error(f"unknown key '{key}' — valid: {', '.join(key_map)}")
+        # Common slip: 'writ set kjv' instead of 'writ set translation kjv'
+        if key.lower() in list_translations():
+            print_error(f"unknown key '{key}' — did you mean: [bold]writ set translation {key.lower()}[/bold]?")
+        elif key in list_plans():
+            print_error(f"unknown key '{key}' — did you mean: [bold]writ set plan {key}[/bold]?")
+        else:
+            print_error(f"unknown key '{key}' — valid: {', '.join(key_map)}")
         raise typer.Exit(1)
+    if value is None:
+        print_error(f"missing value — usage: writ set {key} <value>")
+        raise typer.Exit(1)
+
+    if key == "translation":
+        value = value.lower()
+        if value not in list_translations():
+            installed = ", ".join(list_translations())
+            hint = f"installed: {installed}" if installed else "none installed — run 'writ setup' first"
+            print_error(f"translation '{value}' is not installed ({hint})")
+            raise typer.Exit(1)
+    elif key == "plan" and value not in list_plans():
+        print_error(f"plan '{value}' not found — use 'writ plan list'")
+        raise typer.Exit(1)
+
     conn = get_app_db()
     set_state(conn, key_map[key], value)
     conn.close()
@@ -654,7 +701,8 @@ def bm_go(
     if not bm:
         print_error(f"bookmark #{bookmark_id} not found")
         raise typer.Exit(1)
-    tr = _tr(translation) or bm["translation"]
+    # Prefer an explicit -t flag; otherwise use the translation the bookmark was saved in.
+    tr = translation.lower() if translation else bm["translation"]
     book = book_by_number(bm["book"])
     if not book:
         print_error("invalid book stored in bookmark")
@@ -672,6 +720,7 @@ def bm_remove(
         print_success(f"bookmark #{bookmark_id} removed")
     else:
         print_error(f"bookmark #{bookmark_id} not found")
+        raise typer.Exit(1)
 
 
 # ── Note subcommands ──────────────────────────────────────────────────────────────────────────
@@ -738,27 +787,44 @@ def note_remove(
         print_success(f"note removed from {book.name} {chapter}:{verse}")
     else:
         print_error("note not found")
+        raise typer.Exit(1)
 
 
 # ── Plan subcommands ──────────────────────────────────────────────────────────────────────────
 
 @plan_app.command(name="load")
 def plan_load(
-    filepath: str           = typer.Argument(..., help="Path to .txt plan file"),
+    filepath: str           = typer.Argument(..., help="Bundled plan name or path to a .txt plan file"),
     name:     Optional[str] = typer.Option(None, "-n", "--name",
                                             help="Plan name (defaults to filename stem)"),
 ) -> None:
-    """Import a reading plan from a .txt file."""
+    """Import a reading plan — a bundled name (see below) or your own .txt file.
+
+    Bundled plans: gospels, new-testament, psalms-and-proverbs
+    """
     from pathlib import Path
     p = Path(filepath)
     if not p.exists():
-        print_error(f"file not found: {filepath}")
-        raise typer.Exit(1)
+        bundled = bundled_plans()
+        if filepath in bundled:
+            p = bundled[filepath]
+        else:
+            available = ", ".join(bundled) or "none"
+            print_error(f"file not found: {filepath}  (bundled plans: {available})")
+            raise typer.Exit(1)
     plan_name = name or p.stem
     count = load_plan(plan_name, p)
+    if count == 0:
+        print_error(f"no readable entries in {p} — see README for the plan file format")
+        raise typer.Exit(1)
     print_success(f"loaded plan '[bold]{plan_name}[/bold]' with {count} entries")
-    if Confirm.ask(f"  set '{plan_name}' as active plan?", default=True):
+    try:
+        make_active = Confirm.ask(f"  set '{plan_name}' as active plan?", default=True)
+    except EOFError:
+        make_active = True
+    if make_active:
         set_active_plan(plan_name)
+        print_success(f"active plan: {plan_name}")
 
 
 @plan_app.command(name="list")
@@ -813,41 +879,52 @@ def plan_status() -> None:
         console.print("  [green]complete![/green]")
 
 
-# Click's MultiCommand.parse_args always routes the first positional token into
-# ctx._protected_args (the would-be subcommand slot), then Group.invoke calls
-# resolve_command on it, which raises "No such command" for book abbreviations
-# like 'ge'.  The fix: patch the specific Click group's parse_args so that tokens
-# not matching a registered subcommand bypass _protected_args and land in
-# ctx.args instead, where our callback reads them via ctx.args.
-import typer.main as _typer_main  # noqa: E402
-import click as _click             # noqa: E402
+# ── Entry point ───────────────────────────────────────────────────────────────
+#
+# 'writ ge 1 1-3' has no subcommand — typer would reject 'ge' with "No such
+# command".  Instead of monkeypatching the argument parser (fragile across
+# typer/click versions), main() reroutes any leading token that isn't a known
+# command to the hidden 'lookup' command before typer ever sees it.
 
-_orig_get_command = _typer_main.get_command
+_VALUE_OPTIONS = {"-t", "--translation", "-c", "--compare"}
 
 
-def _get_command_patched(typer_instance, *a, **kw):
-    cmd = _orig_get_command(typer_instance, *a, **kw)
-    if typer_instance is not app:
-        return cmd
-
-    _known = cmd.commands  # dict populated by get_command
-
-    def _parse_args(ctx: _click.Context, args: list) -> list:
-        # Let Click parse the group's own options (-t, -c, etc.)
-        rest = _click.Command.parse_args(cmd, ctx, args)
-        if rest:
-            first = rest[0]
-            if first in _known:
-                # Known subcommand — normal routing
-                ctx._protected_args, ctx.args = rest[:1], rest[1:]
-            else:
-                # Unknown token (book ref, etc.) — pass all to callback via ctx.args
-                ctx._protected_args = []
-                ctx.args = rest
-        return ctx.args
-
-    cmd.parse_args = _parse_args
-    return cmd
+def _command_names() -> set[str]:
+    names: set[str] = set()
+    for cmd in app.registered_commands:
+        names.add(cmd.name or cmd.callback.__name__.replace("_", "-"))  # type: ignore[union-attr]
+    for grp in app.registered_groups:
+        if grp.name:
+            names.add(grp.name)
+    return names
 
 
-_typer_main.get_command = _get_command_patched
+def _reroute(argv: list[str]) -> list[str]:
+    """Turn 'writ ge 1 1-3' into 'writ lookup ge 1 1-3'."""
+    commands = _command_names()
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token in _VALUE_OPTIONS:
+            i += 2  # skip the option and its value
+            continue
+        if token.startswith("-"):
+            return argv  # --help / --version / unknown option: let typer handle it
+        if token in commands:
+            return argv
+        return ["lookup", *argv]
+    return argv
+
+
+def main() -> None:
+    """Console-script entry point: route default lookups, render errors cleanly."""
+    try:
+        app(_reroute(sys.argv[1:]))
+    except (FileNotFoundError, ValueError) as exc:
+        # Missing translation db, malformed verse spec, etc. — user-facing messages.
+        print_error(str(exc))
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

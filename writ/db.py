@@ -75,11 +75,12 @@ def get_app_db() -> sqlite3.Connection:
 def get_translation_db(translation: str) -> sqlite3.Connection:
     path = TRANSLATIONS_DIR / f"{translation.lower()}.db"
     if not path.exists():
-        raise FileNotFoundError(
-            f"Translation '{translation}' not found. "
-            f"Run 'writ translations' to see what's installed, "
-            f"or 'python scripts/import_translation.py' to add one."
-        )
+        installed = list_translations()
+        if installed:
+            hint = f"installed: {', '.join(installed)} — try 'writ -t {installed[0]}' or 'writ set translation {installed[0]}'"
+        else:
+            hint = "no translations installed yet — run 'writ setup' to download the King James Bible"
+        raise FileNotFoundError(f"translation '{translation}' is not installed ({hint})")
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     return conn

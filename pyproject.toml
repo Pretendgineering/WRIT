@@ -4,20 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "writ"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lightning-fast terminal Bible reference and reading tool"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = {text = "GPL-3.0-only"}
 keywords = ["bible", "scripture", "terminal", "cli", "reading", "cyberdeck"]
 authors = [
     {name = "Spasm0dic"},
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
@@ -38,14 +38,13 @@ Repository = "https://github.com/Spasm0dic/WRIT"
 Issues     = "https://github.com/Spasm0dic/WRIT/issues"
 
 [project.scripts]
-writ = "writ.cli:app"
+writ = "writ.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["writ"]
-include = ["data/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

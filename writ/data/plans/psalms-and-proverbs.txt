@@ -1,6 +1,6 @@
 # Psalms and Proverbs — self-paced
 # Classic daily wisdom reading.
-# Load with: writ plan load data/plans/psalms-and-proverbs.txt
+# Load with: writ plan load psalms-and-proverbs
 
 ps 1
 ps 2

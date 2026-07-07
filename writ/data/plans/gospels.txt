@@ -1,6 +1,6 @@
 # Through the Gospels — self-paced plan
 # Read one chapter per session. No dates — advance at your own pace.
-# Load with: writ plan load data/plans/gospels.txt
+# Load with: writ plan load gospels
 
 mt 1
 mt 2

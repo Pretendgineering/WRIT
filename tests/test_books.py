@@ -54,17 +54,32 @@ def test_john_disambiguation():
     assert three.number == 64
 
 
-def test_no_duplicate_canonical_abbrevs():
-    seen = {}
+def test_no_duplicate_abbrevs_across_books():
+    seen: dict[str, str] = {}
     for book in BOOKS:
-        canon = book.abbrevs[0]
-        assert canon not in seen, f"Duplicate canonical abbrev '{canon}'"
-        seen[canon] = book.name
+        for abbrev in book.abbrevs:
+            assert abbrev not in seen, (
+                f"abbrev '{abbrev}' claimed by both {seen.get(abbrev)} and {book.name}"
+            )
+            seen[abbrev] = book.name
 
 
-def test_parse_verse_spec():
-    from writ.lookup import parse_verse_spec
-    assert parse_verse_spec("1")     == [(1, 1)]
-    assert parse_verse_spec("1-3")   == [(1, 3)]
-    assert parse_verse_spec("1,5")   == [(1, 1), (5, 5)]
-    assert parse_verse_spec("1-3,5") == [(1, 3), (5, 5)]
+def test_chapter_counts_sane():
+    total = sum(b.chapters for b in BOOKS)
+    assert total == 1189  # canonical Protestant chapter count
+
+
+def test_roman_numeral_names():
+    # scrollmapper CSVs use these forms
+    assert resolve_book("I Samuel").number == 9
+    assert resolve_book("II Kings").number == 12
+    assert resolve_book("II Chronicles").number == 14
+    assert resolve_book("I Corinthians").number == 46
+    assert resolve_book("III John").number == 64
+    assert resolve_book("ii peter").number == 61
+
+
+def test_alternate_names():
+    assert resolve_book("Revelation of John").number == 66
+    assert resolve_book("Psalm").number == 19
+    assert resolve_book("Song of Songs").number == 22

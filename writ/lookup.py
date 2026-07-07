@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from .books import Book, book_by_number
-from .db import get_app_db, get_translation_db, get_state
+from .db import get_app_db, get_translation_db, get_state, list_translations
 
 
 @dataclass
@@ -14,15 +14,29 @@ class Verse:
 
 
 def parse_verse_spec(spec: str) -> list[tuple[int, int]]:
-    """Parse '1', '1-3', '1,5', '1-3,5,7-9' → list of (start, end) inclusive ranges."""
+    """Parse '1', '1-3', '1,5', '1-3,5,7-9' → list of (start, end) inclusive ranges.
+
+    Raises ValueError with a user-facing message on malformed input.
+    """
+    def _num(token: str) -> int:
+        token = token.strip()
+        if not token.isdigit():
+            raise ValueError(
+                f"invalid verse reference '{spec}' — use forms like 16, 1-3, or 1-3,7"
+            )
+        return int(token)
+
     ranges: list[tuple[int, int]] = []
     for part in spec.split(","):
         part = part.strip()
         if "-" in part:
             a, b = part.split("-", 1)
-            ranges.append((int(a), int(b)))
+            start, end = _num(a), _num(b)
+            if start > end:
+                start, end = end, start
+            ranges.append((start, end))
         else:
-            n = int(part)
+            n = _num(part)
             ranges.append((n, n))
     return ranges
 
@@ -37,12 +51,17 @@ def fetch_verses(
     try:
         if verse_spec:
             rows = []
+            seen: set[int] = set()
             for v_start, v_end in parse_verse_spec(verse_spec):
-                rows.extend(conn.execute(
+                for r in conn.execute(
                     "SELECT verse, text FROM verses "
                     "WHERE book=? AND chapter=? AND verse BETWEEN ? AND ? ORDER BY verse",
                     (book.number, chapter, v_start, v_end),
-                ).fetchall())
+                ).fetchall():
+                    if r["verse"] not in seen:
+                        seen.add(r["verse"])
+                        rows.append(r)
+            rows.sort(key=lambda r: r["verse"])
         else:
             rows = conn.execute(
                 "SELECT verse, text FROM verses WHERE book=? AND chapter=? ORDER BY verse",
@@ -96,6 +115,13 @@ def get_chapter_count(translation: str, book: Book) -> int:
 def get_default_translation() -> str:
     conn = get_app_db()
     try:
-        return get_state(conn, "default_translation", "web")
+        val = get_state(conn, "default_translation", "")
     finally:
         conn.close()
+    if val:
+        return val
+    # No default recorded: if exactly one translation is installed, use it.
+    installed = list_translations()
+    if len(installed) == 1:
+        return installed[0]
+    return "kjv"

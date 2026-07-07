@@ -1,7 +1,7 @@
 from datetime import date
 from pathlib import Path
 
-_DAILY_FILE = Path(__file__).parent.parent / "data" / "daily_verses.txt"
+_DAILY_FILE = Path(__file__).parent / "data" / "daily_verses.txt"
 
 
 def _load_refs() -> list[tuple[str, int, int]]:
