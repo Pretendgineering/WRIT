@@ -91,6 +91,25 @@ for _b in BOOKS:
 for _b in BOOKS:
     _index[_b.name.lower().replace(" ", "")] = _b
 
+# Roman-numeral forms used by some data sources ("I Samuel", "II Kings", "III John")
+_ROMAN = {"1": "i", "2": "ii", "3": "iii"}
+for _b in BOOKS:
+    _parts = _b.name.split(" ", 1)
+    if len(_parts) == 2 and _parts[0] in _ROMAN:
+        _roman_name = f"{_ROMAN[_parts[0]]} {_parts[1].lower()}"
+        _index[_roman_name] = _b
+        _index[_roman_name.replace(" ", "")] = _b
+
+# Common alternate names
+_ALIASES = {
+    "revelation of john": 66,
+    "psalm":              19,
+    "song of songs":      22,
+    "canticles":          22,
+}
+for _alias, _num in _ALIASES.items():
+    _index[_alias] = BOOKS[_num - 1]
+
 
 def resolve_book(ref: str) -> Book | None:
     """Resolve an abbreviation or full name to a Book, case-insensitive."""

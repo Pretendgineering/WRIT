@@ -5,7 +5,7 @@ Offline-first, no account required, cyberdeck-friendly.
 
 ```
 writ ge 1 1-3          # Genesis 1:1-3
-writ jn 3 16           # John 3:16, interactive
+writ jn 3 16           # John 3:16
 writ ps 23             # Psalm 23, chapter navigation
 writ daily             # verse of the day
 writ continue          # resume active reading plan
@@ -36,17 +36,25 @@ writ ge 1
 
 **Requirements:** Python 3.10+, internet access for the initial translation download.
 
+## Upgrade
+
+Re-run the same install command — it detects the existing install and upgrades it in place:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Spasm0dic/WRIT/main/install.sh | bash
+```
+
 ---
 
 ## Translations
 
-`writ setup` (run automatically on install) downloads the **King James Bible** — public domain, no license restrictions.
+`writ setup` (run automatically on install) downloads the **King James Bible** — public domain, no license restrictions. Re-download any time with `writ setup --force`.
 
 To add more translations, use the bundled importer:
 
 ```bash
-python scripts/import_translation.py file.csv -n kjv --format csv
-writ set translation kjv
+python scripts/import_translation.py file.csv -n niv --format csv
+writ set translation niv
 ```
 
 **Supported input formats:**
@@ -74,7 +82,7 @@ writ ge 1 1               # Genesis 1:1
 writ ge 1 1-3             # Genesis 1:1-3
 writ ro 8 28,35           # Romans 8:28 and 8:35
 writ ge 1 1 -t kjv        # specific translation
-writ ge 1 1 -c kjv        # side-by-side comparison with KJV
+writ ge 1 1 -c niv        # side-by-side comparison (if installed)
 ```
 
 After displaying a verse, a quick-action bar appears:
@@ -101,8 +109,11 @@ Key conflict resolutions:
 
 ### Reading plans
 
+Three plans ship with writ — load one by name:
+
 ```bash
-writ plan load data/plans/gospels.txt   # import a plan
+writ plan load gospels                  # bundled: gospels, new-testament, psalms-and-proverbs
+writ plan load ~/my-plan.txt            # or import your own plan file
 writ plan list                          # list loaded plans
 writ plan set gospels                   # set active plan
 writ plan status                        # show progress
@@ -124,10 +135,10 @@ mt 1-2
 2026-01-02 ge 3-4
 ```
 
-Bundled plans in `data/plans/`:
-- `gospels.txt` — Matthew → John
-- `new-testament.txt` — full NT, canonical order
-- `psalms-and-proverbs.txt` — interleaved wisdom literature
+Bundled plans:
+- `gospels` — Matthew → John
+- `new-testament` — full NT, canonical order
+- `psalms-and-proverbs` — interleaved wisdom literature
 
 If you're behind on a dated plan, `writ continue` prompts you to catch up, reset to today, or keep reading from where you left off.
 
@@ -136,7 +147,7 @@ If you're behind on a dated plan, `writ continue` prompts you to catch up, reset
 ```bash
 writ bookmark add devotionals/morning   # bookmark last verse
 writ bookmark add path ge 1 1           # bookmark specific verse
-writ bm list                            # tree view of all bookmarks
+writ bm list                            # tree view of all bookmarks ('bm' = shortcut)
 writ bm list devotionals/               # browse a subtree
 writ bm go 3                            # jump to bookmark #3
 writ bm remove 3
@@ -158,7 +169,7 @@ Notes are translation-agnostic and appear inline when reading.
 ### Search
 
 ```bash
-writ search "love your neighbor"
+writ search "love your neighbour"
 writ search "faith" -t kjv
 writ search "fear not" -b is          # search within Isaiah only
 ```
@@ -169,12 +180,12 @@ writ search "fear not" -b is          # search within Isaiah only
 writ daily                            # verse of the day (deterministic, offline)
 writ random                           # random verse
 writ random ps                        # random verse from Psalms
-writ compare ge 1 1 kjv,web           # side-by-side translation comparison
+writ compare ge 1 1 kjv,niv           # side-by-side translation comparison
 writ history                          # recent reading history + streak
 writ translations                     # list installed translations
 writ books                            # all 66 books + abbreviations
 writ set translation kjv              # set default translation
-writ setup                            # re-download / reinstall KJV translation
+writ setup                            # download / reinstall KJV translation
 ```
 
 ---
@@ -186,6 +197,7 @@ All user data lives at `~/.local/share/writ/` (override with `$WRIT_DATA`):
 ```
 ~/.local/share/writ/
 ├── writ.db                  # bookmarks, notes, plans, history, settings
+├── env/                     # the virtualenv created by install.sh
 └── translations/
     ├── kjv.db
     └── ...

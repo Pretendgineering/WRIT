@@ -1,5 +1,5 @@
 # New Testament — self-paced, canonical order
-# Load with: writ plan load data/plans/new-testament.txt
+# Load with: writ plan load new-testament
 
 mt 1
 mt 2

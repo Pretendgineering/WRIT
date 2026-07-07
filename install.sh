@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# writ installer — also safe to re-run to upgrade an existing install.
 set -e
 
 REPO="https://github.com/Spasm0dic/WRIT.git"
@@ -19,12 +20,20 @@ if sys.version_info < (3, 10):
 EOF
 
 # ── Create venv ─────────────────────────────────────────────────────────
-echo "→ Creating virtual environment at $VENV_DIR"
-python3 -m venv "$VENV_DIR/env"
+if [[ -x "$VENV_DIR/env/bin/pip" ]]; then
+    echo "→ Existing install found at $VENV_DIR — upgrading"
+else
+    echo "→ Creating virtual environment at $VENV_DIR"
+    if ! python3 -m venv "$VENV_DIR/env"; then
+        echo "error: could not create a virtualenv."
+        echo "       On Debian/Ubuntu, install it with:  sudo apt install python3-venv"
+        exit 1
+    fi
+fi
 
 # ── Install writ ────────────────────────────────────────────────────────
 echo "→ Installing writ from GitHub..."
-"$VENV_DIR/env/bin/pip" install --quiet --no-cache-dir "git+$REPO"
+"$VENV_DIR/env/bin/pip" install --quiet --no-cache-dir --upgrade --force-reinstall "git+$REPO"
 
 # ── Symlink binary ───────────────────────────────────────────────────────────
 mkdir -p "$BIN_DIR"
@@ -46,7 +55,8 @@ if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
 fi
 
 # ── First-time setup (download KJV translation) ────────────────────────────────
-echo "→ Downloading King James Bible (public domain)..."
+# 'writ setup' skips automatically if the KJV is already installed.
+echo "→ Setting up King James Bible (public domain)..."
 "$BIN_DIR/writ" setup
 
 echo ""
