@@ -55,6 +55,8 @@ def _parse_line(line: str) -> dict | None:
         return None
     if chapter_start > chapter_end:
         chapter_start, chapter_end = chapter_end, chapter_start
+    if chapter_start < 1 or chapter_end > book.chapters:
+        return None
 
     return {
         "book":          book.number,
@@ -68,23 +70,24 @@ def _parse_line(line: str) -> dict | None:
 
 def load_plan(name: str, filepath: Path) -> int:
     """Import a plan file, replacing any existing plan with the same name."""
+    entries = []
+    day = 1
+    with open(filepath, encoding="utf-8") as fh:
+        for line in fh:
+            entry = _parse_line(line)
+            if entry:
+                entries.append((
+                    name, day,
+                    entry["book"], entry["chapter_start"], entry["chapter_end"],
+                    entry["target_date"],
+                ))
+                day += 1
+    if not entries:
+        return 0  # leave any existing plan of this name untouched
+
     conn = get_app_db()
     try:
         conn.execute("DELETE FROM reading_plans WHERE name=?", (name,))
-
-        entries = []
-        day = 1
-        with open(filepath, encoding="utf-8") as fh:
-            for line in fh:
-                entry = _parse_line(line)
-                if entry:
-                    entries.append((
-                        name, day,
-                        entry["book"], entry["chapter_start"], entry["chapter_end"],
-                        entry["target_date"],
-                    ))
-                    day += 1
-
         conn.executemany(
             "INSERT INTO reading_plans (name, day, book, chapter_start, chapter_end, target_date) "
             "VALUES (?,?,?,?,?,?)",

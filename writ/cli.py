@@ -15,7 +15,8 @@ from typing import Optional
 import typer
 from rich.prompt import Confirm, Prompt
 
-from .books import BOOKS, book_by_number, resolve_book
+from . import __version__
+from .books import BOOKS, Book, book_by_number, resolve_book
 from .bookmarks import add_bookmark, get_bookmark, list_bookmarks, remove_bookmark
 from .daily import get_daily_ref
 from .db import get_app_db, get_state, list_translations, set_state
@@ -50,11 +51,18 @@ from .plans import (
     reset_plan_to_today,
     set_active_plan,
 )
-from .search import search_text
+from .search import RESULT_CAP, search_text
 
 app = typer.Typer(
     name="writ",
-    help="Lightning-fast terminal Bible reference and reading tool.",
+    help=(
+        "Lightning-fast terminal Bible reference and reading tool.\n\n"
+        "Look up a passage with:  writ BOOK [CHAPTER] [VERSES]\n\n"
+        "  writ ge 1 1-3     Genesis 1:1-3\n\n"
+        "  writ jn 3 16      John 3:16\n\n"
+        "  writ ps 23        Psalm 23 (chapter reader)\n\n"
+        "Run 'writ books' for every book abbreviation."
+    ),
     invoke_without_command=True,
     no_args_is_help=False,
     add_completion=False,
@@ -96,6 +104,14 @@ def _load_context() -> tuple[str, int, int, int] | None:
     if not tr or book == "0":
         return None
     return tr, int(book), int(ch), int(vs)
+
+
+def _check_chapter(book: Book, chapter: int) -> None:
+    """Exit with a clear message if the chapter number can't exist in this book."""
+    if not 1 <= chapter <= book.chapters:
+        noun = "chapter" if book.chapters == 1 else "chapters"
+        print_error(f"{book.name} has {book.chapters} {noun} — there is no chapter {chapter}")
+        raise typer.Exit(1)
 
 
 def _interactive_chapter(translation: str, book_num: int, start_chapter: int) -> None:
@@ -158,16 +174,18 @@ def _interactive_chapter(translation: str, book_num: int, start_chapter: int) ->
 
 # ── Main lookup (default command) ───────────────────────────────────────────
 
-@app.callback(invoke_without_command=True)
-def _root(ctx: typer.Context) -> None:
-    """
-    Look up Bible verses.
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(f"writ {__version__}")
+        raise typer.Exit()
 
-      writ ge 1 1-3       Genesis 1:1-3\n
-      writ jn 3 16        John 3:16\n
-      writ ps 23          Psalm 23 (interactive)\n
-      writ ge             Genesis ch.1 (interactive)
-    """
+
+@app.callback(invoke_without_command=True)
+def _root(
+    ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", callback=_version_callback,
+                                 is_eager=True, help="Show the version and exit."),
+) -> None:
     if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())
 
@@ -175,8 +193,8 @@ def _root(ctx: typer.Context) -> None:
 @app.command(name="lookup", hidden=True)
 def lookup(
     book_ref:    str           = typer.Argument(..., metavar="BOOK"),
-    chapter_arg: Optional[str] = typer.Argument(None, metavar="[CHAPTER]"),
-    verses:      Optional[str] = typer.Argument(None, metavar="[VERSES]"),
+    chapter_arg: Optional[str] = typer.Argument(None, metavar="CHAPTER"),
+    verses:      Optional[str] = typer.Argument(None, metavar="VERSES"),
     translation: Optional[str] = typer.Option(None, "-t", "--translation",
                                                help="Translation to use  (e.g. kjv)"),
     compare_with: Optional[str] = typer.Option(None, "-c", "--compare",
@@ -194,21 +212,22 @@ def lookup(
         except ValueError:
             print_error(f"invalid chapter '{chapter_arg}' — try [bold]writ --help[/bold]")
             raise typer.Exit(1)
+        _check_chapter(book, chapter)
     else:
-        chapter = None
+        chapter = 1
 
     tr = _tr(translation)
 
     # ── chapter-level interactive reading ──────────────────────────────────────────────
     if verses is None:
-        _interactive_chapter(tr, book.number, chapter or 1)
+        _interactive_chapter(tr, book.number, chapter)
         return
 
     # ── specific verse(s) ────────────────────────────────────────────────────────────────────
-    verse_list = fetch_verses(tr, book, chapter or 1, verses)
+    verse_list = fetch_verses(tr, book, chapter, verses)
     if not verse_list:
         print_error(
-            f"no results for {book.name} {chapter or 1}:{verses} in {tr.upper()}"
+            f"no results for {book.name} {chapter}:{verses} in {tr.upper()}"
         )
         raise typer.Exit(1)
 
@@ -216,21 +235,21 @@ def lookup(
     v_end   = verse_list[-1].verse
 
     # Show existing note inline if present
-    verse_notes = {v: t for v in [v_start] if (t := get_note(book.number, chapter or 1, v))}
+    verse_notes = {v: t for v in [v_start] if (t := get_note(book.number, chapter, v))}
     if verse_notes:
         display_verses_with_notes(verse_list, tr, verse_notes)
     else:
         display_verses(verse_list, tr)
 
-    record(tr, book.number, chapter or 1, v_start, v_end)
-    _save_context(tr, book.number, chapter or 1, v_start)
+    record(tr, book.number, chapter, v_start, v_end)
+    _save_context(tr, book.number, chapter, v_start)
 
     # Optional side-by-side comparison
     if compare_with:
         pairs = [(tr, verse_list)]
         for ctr in compare_with.split(","):
             ctr = ctr.strip()
-            pairs.append((ctr, fetch_verses(ctr, book, chapter or 1, verses)))
+            pairs.append((ctr, fetch_verses(ctr, book, chapter, verses)))
         display_comparison(pairs)
 
     # Quick-action bar for verse-level lookups
@@ -238,14 +257,14 @@ def lookup(
 
     if choice == "b":
         path = Prompt.ask("  bookmark path")
-        bm_id = add_bookmark(path, tr, book.number, chapter or 1, v_start)
+        bm_id = add_bookmark(path, tr, book.number, chapter, v_start)
         print_success(f"saved bookmark #{bm_id} → {path}")
     elif choice == "+":
-        existing = get_note(book.number, chapter or 1, v_start)
+        existing = get_note(book.number, chapter, v_start)
         if existing:
             console.print(f"  [dim italic]existing: {existing}[/dim italic]")
         text = Prompt.ask("  note")
-        upsert_note(book.number, chapter or 1, v_start, text)
+        upsert_note(book.number, chapter, v_start, text)
         print_success("note saved")
 
 
@@ -264,17 +283,20 @@ def cont(
             console.print(
                 f"[yellow]You are {behind} day(s) behind on '[bold]{plan_name}[/bold]'.[/yellow]"
             )
-            choice = Prompt.ask(
-                "  [c]atch up today  [r]eset to today  [k]eep going from where you left off",
-                choices=["c", "r", "k"],
-                default="k",
-            )
+            try:
+                choice = Prompt.ask(
+                    "  \\[c]atch up today  \\[r]eset to today  \\[k]eep going from where you left off",
+                    choices=["c", "r", "k"],
+                    default="k",
+                )
+            except EOFError:
+                choice = "k"
             if choice == "r":
                 reset_plan_to_today(plan_name)
                 print_success("plan reset to today")
             elif choice == "c":
                 for entry in get_catchup_entries(plan_name):
-                    _read_plan_entry(tr, entry)
+                    _read_plan_entry(tr, entry, prompt_done=True)
                 return
 
         entry = get_next_entry(plan_name)
@@ -391,6 +413,10 @@ def search(
     book_ref:    Optional[str]  = typer.Option(None, "-b", "--book", help="Limit to one book"),
 ) -> None:
     """Full-text search across a translation."""
+    query = query.strip()
+    if not query:
+        print_error("nothing to search for — usage: writ search \"some words\"")
+        raise typer.Exit(1)
     tr = _tr(translation)
     book_num = None
     if book_ref:
@@ -404,7 +430,8 @@ def search(
     if not results:
         print_info(f"no results for '{query}' in {tr.upper()}")
         return
-    console.print(f"[dim]{len(results)} result(s) for '[bold]{query}[/bold]' in {tr.upper()}[/dim]\n")
+    count = f"first {RESULT_CAP}" if len(results) >= RESULT_CAP else str(len(results))
+    console.print(f"[dim]{count} result(s) for '[bold]{query}[/bold]' in {tr.upper()}[/dim]\n")
     display_search_results(results)
 
 
@@ -544,7 +571,7 @@ def setup(
 
 @app.command()
 def history(
-    limit: int = typer.Option(20, "-n", help="Number of entries to show"),
+    limit: int = typer.Option(20, "-n", min=1, help="Number of entries to show"),
 ) -> None:
     """Show recent reading history."""
     items = get_history(limit)
@@ -664,6 +691,7 @@ def bm_add(
         book_num = book.number
         ch = chapter or 1
         vs = verse or 1
+        _check_chapter(book, ch)
         tr = _tr(translation)
     else:
         ctx = _load_context()
@@ -708,6 +736,9 @@ def bm_go(
         print_error("invalid book stored in bookmark")
         raise typer.Exit(1)
     verse_list = fetch_verses(tr, book, bm["chapter"], str(bm["verse"]))
+    if not verse_list:
+        print_error(f"{book.name} {bm['chapter']}:{bm['verse']} not found in {tr.upper()}")
+        raise typer.Exit(1)
     display_verses(verse_list, tr)
 
 
@@ -739,6 +770,7 @@ def note_add(
             print_error(f"unknown book '{book_ref}'")
             raise typer.Exit(1)
         book_num, ch, vs = book.number, chapter or 1, verse or 1
+        _check_chapter(book, ch)
     else:
         ctx = _load_context()
         if not ctx:
@@ -813,6 +845,19 @@ def plan_load(
             print_error(f"file not found: {filepath}  (bundled plans: {available})")
             raise typer.Exit(1)
     plan_name = name or p.stem
+    if plan_name in list_plans():
+        done = get_plan_progress(plan_name)["done"]
+        if done:
+            try:
+                replace = Confirm.ask(
+                    f"  plan '{plan_name}' already exists with {done} reading(s) done — reload and reset progress?",
+                    default=False,
+                )
+            except EOFError:
+                replace = False
+            if not replace:
+                print_info("kept the existing plan")
+                return
     count = load_plan(plan_name, p)
     if count == 0:
         print_error(f"no readable entries in {p} — see README for the plan file format")
