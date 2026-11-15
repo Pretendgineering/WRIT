@@ -58,3 +58,8 @@ def test_daily_verses_parseable():
         assert book is not None, f"unknown book abbrev '{abbrev}' in daily_verses.txt"
         assert 1 <= chapter <= book.chapters, f"{abbrev} {chapter} out of range"
         assert verse >= 1
+
+
+def test_chapter_beyond_book_skipped():
+    assert _parse_line("ge 51") is None
+    assert _parse_line("ge 0") is None

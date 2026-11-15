@@ -3,6 +3,7 @@
 set -e
 
 REPO="https://github.com/Spasm0dic/WRIT.git"
+BRANCH="main"
 VENV_DIR="$HOME/.local/share/writ"
 BIN_DIR="$HOME/.local/bin"
 
@@ -33,7 +34,7 @@ fi
 
 # ── Install writ ────────────────────────────────────────────────────────
 echo "→ Installing writ from GitHub..."
-"$VENV_DIR/env/bin/pip" install --quiet --no-cache-dir --upgrade --force-reinstall "git+$REPO"
+"$VENV_DIR/env/bin/pip" install --quiet --no-cache-dir --upgrade --force-reinstall "git+$REPO@$BRANCH"
 
 # ── Symlink binary ───────────────────────────────────────────────────────────
 mkdir -p "$BIN_DIR"

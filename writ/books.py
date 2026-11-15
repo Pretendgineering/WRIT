@@ -106,6 +106,7 @@ _ALIASES = {
     "psalm":              19,
     "song of songs":      22,
     "canticles":          22,
+    "song":               22,
 }
 for _alias, _num in _ALIASES.items():
     _index[_alias] = BOOKS[_num - 1]

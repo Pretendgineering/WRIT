@@ -83,3 +83,7 @@ def test_alternate_names():
     assert resolve_book("Revelation of John").number == 66
     assert resolve_book("Psalm").number == 19
     assert resolve_book("Song of Songs").number == 22
+
+
+def test_song_alias():
+    assert resolve_book("song").number == 22
