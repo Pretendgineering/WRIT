@@ -3,6 +3,18 @@
 Lightning-fast terminal Bible reference and reading tool.  
 Offline-first, no account required, cyberdeck-friendly.
 
+Type `writ` on its own to open the interactive shell, then just type commands:
+
+```
+$ writ
+writ › jn 3 16                # John 3:16
+writ › ps 23                  # Psalm 23 in the chapter reader
+writ › search "still waters"
+writ › quit
+```
+
+Or run any single command straight from your terminal:
+
 ```
 writ ge 1 1-3          # Genesis 1:1-3
 writ jn 3 16           # John 3:16
@@ -31,7 +43,7 @@ This will:
 After install, open a new terminal or run `source ~/.bashrc` and you're ready:
 
 ```bash
-writ ge 1
+writ
 ```
 
 **Requirements:** Python 3.10+, internet access for the initial translation download.
@@ -70,6 +82,23 @@ Also auto-detects the [scrollmapper/bible_databases](https://github.com/scrollma
 ---
 
 ## Commands
+
+### Interactive shell
+
+Run `writ` with nothing after it to open a persistent session with a splash screen. Every command below works inside it — just leave off the `writ`:
+
+| In the shell | Does |
+|---|---|
+| `jn 3 16`, `search faith`, `bm list`, … | any writ command |
+| `help` / `help search` | list commands / help for one command |
+| Tab | complete commands, book abbreviations and plan names |
+| ↑ / ↓ | command history (kept between sessions) |
+| `clear` | clear the screen |
+| `quit`, `exit`, `q`, or Ctrl-D | leave the shell |
+
+Inside the shell, a verse lookup doesn't stop to wait for a keypress; bookmark or annotate the verse you just read with `bm add NAME` or `note add "TEXT"`. The chapter reader (`ps 23`) still uses single keys — `n`, `p`, `b`, `+` — and `q` returns you to the `writ ›` prompt.
+
+Piping or scripting? `writ` with arguments always runs one command and exits.
 
 ### Lookup (default)
 

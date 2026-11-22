@@ -69,6 +69,9 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 
+# True while running inside the interactive shell (see writ/shell.py).
+SHELL_MODE = False
+
 bookmark_app = typer.Typer(help="Manage bookmarks.", no_args_is_help=True)
 plan_app     = typer.Typer(help="Manage reading plans.", no_args_is_help=True)
 note_app     = typer.Typer(help="Manage verse margin notes.", no_args_is_help=True)
@@ -251,6 +254,15 @@ def lookup(
             ctr = ctr.strip()
             pairs.append((ctr, fetch_verses(ctr, book, chapter, verses)))
         display_comparison(pairs)
+
+    # Inside the interactive shell the prompt itself is the action bar:
+    # don't swallow the first keystroke of the user's next command.
+    if SHELL_MODE:
+        console.print(
+            "  [dim]bm add NAME[/dim] [dim italic]to bookmark ·[/dim italic] "
+            '[dim]note add "TEXT"[/dim] [dim italic]to annotate[/dim italic]'
+        )
+        return
 
     # Quick-action bar for verse-level lookups
     choice = action_prompt()
@@ -962,9 +974,18 @@ def _reroute(argv: list[str]) -> list[str]:
 
 
 def main() -> None:
-    """Console-script entry point: route default lookups, render errors cleanly."""
+    """Console-script entry point.
+
+    A bare 'writ' in a terminal opens the interactive shell; with arguments
+    (or when piped) it runs a single command and exits.
+    """
+    argv = sys.argv[1:]
+    if not argv and sys.stdin.isatty() and sys.stdout.isatty():
+        from .shell import run_shell
+        run_shell()
+        return
     try:
-        app(_reroute(sys.argv[1:]))
+        app(_reroute(argv))
     except (FileNotFoundError, ValueError) as exc:
         # Missing translation db, malformed verse spec, etc. — user-facing messages.
         print_error(str(exc))

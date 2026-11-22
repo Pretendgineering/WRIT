@@ -61,6 +61,6 @@ echo "→ Setting up King James Bible (public domain)..."
 "$BIN_DIR/writ" setup
 
 echo ""
-echo "✓ Done. Start with:  writ ge 1"
+echo "✓ Done. Type  writ  to start."
 echo ""
 echo "  If 'writ' isn't found, run:  source ~/.bashrc  (or open a new terminal)"
