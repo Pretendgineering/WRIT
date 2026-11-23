@@ -2,7 +2,7 @@
 # writ installer — also safe to re-run to upgrade an existing install.
 set -e
 
-REPO="https://github.com/Spasm0dic/WRIT.git"
+REPO="https://github.com/Pretendgineering/WRIT.git"
 BRANCH="main"
 VENV_DIR="$HOME/.local/share/writ"
 BIN_DIR="$HOME/.local/bin"

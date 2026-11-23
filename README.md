@@ -43,7 +43,7 @@ writ continue          # resume active reading plan
 One command — no pip, no system packages beyond Python 3.10:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Spasm0dic/WRIT/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Pretendgineering/WRIT/main/install.sh | bash
 ```
 
 This will:
@@ -66,7 +66,7 @@ writ
 Re-run the same install command — it detects the existing install and upgrades it in place:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Spasm0dic/WRIT/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Pretendgineering/WRIT/main/install.sh | bash
 ```
 
 ---
@@ -258,5 +258,5 @@ rm ~/.local/bin/writ
 
 ## Contributing
 
-Issues and PRs welcome at [github.com/Spasm0dic/WRIT](https://github.com/Spasm0dic/WRIT).  
+Issues and PRs welcome at [github.com/Pretendgineering/WRIT](https://github.com/Pretendgineering/WRIT).  
 See `scripts/import_translation.py` to add new input format support.
