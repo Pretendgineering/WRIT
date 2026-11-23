@@ -553,7 +553,7 @@ def setup(
         print_error(
             f"skipped {skipped:,} verses from unrecognized book names: "
             f"{', '.join(sorted(unknown_books))} — please report this at "
-            f"https://github.com/Spasm0dic/WRIT/issues"
+            f"https://github.com/Pretendgineering/WRIT/issues"
         )
 
     console.print(f"[dim]Writing {len(rows):,} verses to {db_path}…[/dim]")
